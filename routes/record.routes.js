@@ -1,239 +1,3 @@
-// import express from 'express';
-// import MedicalRecord from '../models/MedicalRecord.js';
-// import HospitalPatientLink from '../models/HospitalPatientLink.js';
-// import { authenticate, authorize } from '../middleware/auth.js';
-// import multer from 'multer';
-
-// const router = express.Router();
-// const storage = multer.memoryStorage();
-// const upload = multer({ storage });
-
-// // ✅ Get All Records (Hospital-specific)
-// router.get('/', authenticate, authorize('hospital', 'doctor'), async (req, res) => {
-//   try {
-//     const hospitalId = req.user.hospitalId;
-
-//     const records = await MedicalRecord.find({ hospitalId })
-//       .populate('patientId', 'name email age gender')
-//       .populate('doctorId', 'name specialization')
-//       .populate('hospitalId', 'name')
-//       .sort({ createdAt: -1 });
-
-//     res.json(records);
-//   } catch (err) {
-//     res.status(500).json({ message: err.message });
-//   }
-// });
-
-// // ✅ Create Medical Record
-// router.post('/', authenticate, authorize('doctor', 'hospital'), async (req, res) => {
-//   try {
-//     const { patientId, doctorId, diagnosis, symptoms, prescription, notes, voiceTranscript, prescriptions, vitals, nextVisit } = req.body;
-//     const hospitalId = req.user.hospitalId;
-
-//     // Determine doctor ID
-//     const finalDoctorId = req.user.role === 'doctor' ? req.user.id : doctorId;
-
-//     if (!patientId || !hospitalId || !finalDoctorId || !diagnosis) {
-//       return res.status(400).json({ message: 'Missing required fields: patientId, hospitalId, doctorId, diagnosis' });
-//     }
-
-//     const record = new MedicalRecord({
-//       patientId,
-//       doctorId: finalDoctorId,
-//       hospitalId,
-//       diagnosis,
-//       symptoms,
-//       prescription,
-//       notes,
-//       voiceTranscript,
-//       prescriptions: Array.isArray(prescriptions) ? prescriptions : [],
-//       vitals,
-//       nextVisit
-//     });
-
-//     await record.save();
-
-//     // Update hospital-patient link
-//     await HospitalPatientLink.findOneAndUpdate(
-//       { patientId, hospitalId },
-//       { 
-//         lastVisitDate: new Date(),
-//         $inc: { totalVisits: 1 }
-//       },
-//       { upsert: true }
-//     );
-
-//     res.status(201).json({
-//       message: 'Medical record created successfully',
-//       record
-//     });
-//   } catch (err) {
-//     console.error('Create record error:', err);
-//     res.status(500).json({ message: err.message });
-//   }
-// });
-
-// // ✅ Upload Record with File (Admin/Hospital)
-// router.post('/upload', authenticate, authorize('hospital', 'doctor'), upload.single('file'), async (req, res) => {
-//   try {
-//     const { patientId, doctorId, diagnosis, notes, prescriptions } = req.body;
-//     const hospitalId = req.user.hospitalId;
-
-//     if (!patientId || !doctorId || !hospitalId || !diagnosis) {
-//       return res.status(400).json({ message: 'Missing required fields' });
-//     }
-
-//     const record = new MedicalRecord({
-//       patientId,
-//       doctorId,
-//       hospitalId,
-//       diagnosis,
-//       notes,
-//       prescriptions: prescriptions ? prescriptions.split(',').map(p => p.trim()) : []
-//     });
-
-//     if (req.file) {
-//       record.fileName = req.file.originalname;
-//       record.fileData = req.file.buffer;
-//     }
-
-//     await record.save();
-
-//     // Update hospital-patient link
-//     await HospitalPatientLink.findOneAndUpdate(
-//       { patientId, hospitalId },
-//       { 
-//         lastVisitDate: new Date(),
-//         $inc: { totalVisits: 1 }
-//       },
-//       { upsert: true }
-//     );
-
-//     res.status(201).json({ 
-//       message: 'Record uploaded successfully', 
-//       record 
-//     });
-//   } catch (err) {
-//     console.error('Upload record error:', err);
-//     res.status(500).json({ message: err.message });
-//   }
-// });
-
-// // ✅ Get Doctor's Records (Current Hospital Only)
-// router.get('/doctor/:doctorId', authenticate, authorize('doctor', 'hospital'), async (req, res) => {
-//   try {
-//     const { doctorId } = req.params;
-//     const hospitalId = req.user.hospitalId;
-
-//     // Authorization check
-//     if (req.user.role === 'doctor' && req.user.id !== doctorId) {
-//       return res.status(403).json({ message: 'Forbidden' });
-//     }
-
-//     const records = await MedicalRecord.find({ 
-//       doctorId, 
-//       hospitalId 
-//     })
-//       .populate('patientId', 'name age gender')
-//       .sort({ createdAt: -1 });
-
-//     res.json(records);
-//   } catch (err) {
-//     res.status(500).json({ message: err.message });
-//   }
-// });
-
-// // ✅ Get Patient's Records (All Hospitals or Specific)
-// router.get('/patient/:patientId', authenticate, authorize('doctor', 'patient', 'hospital'), async (req, res) => {
-//   try {
-//     const { patientId } = req.params;
-//     const { allHospitals } = req.query; // Optional: get records from all hospitals
-
-//     // Authorization check for patient role
-//     if (req.user.role === 'patient' && req.user.id !== patientId) {
-//       return res.status(403).json({ message: 'Forbidden' });
-//     }
-
-//     let query = { patientId };
-
-//     // If not patient role and not requesting all hospitals, filter by current hospital
-//     if (req.user.role !== 'patient' && !allHospitals) {
-//       query.hospitalId = req.user.hospitalId;
-//     }
-
-//     const records = await MedicalRecord.find(query)
-//       .populate('doctorId', 'name specialization')
-//       .populate('hospitalId', 'name address')
-//       .sort({ createdAt: -1 });
-
-//     res.json(records);
-//   } catch (err) {
-//     res.status(500).json({ message: err.message });
-//   }
-// });
-
-// // ✅ Update Record (Doctor Only - Own Records)
-// router.put('/:id', authenticate, authorize('doctor'), async (req, res) => {
-//   try {
-//     const { id } = req.params;
-//     const { diagnosis, symptoms, prescription, notes, prescriptions, vitals, nextVisit } = req.body;
-
-//     const record = await MedicalRecord.findById(id);
-//     if (!record) {
-//       return res.status(404).json({ message: 'Record not found' });
-//     }
-
-//     // Check if doctor owns this record
-//     if (record.doctorId.toString() !== req.user.id) {
-//       return res.status(403).json({ message: 'You can only update your own records' });
-//     }
-
-//     // Update fields
-//     if (diagnosis) record.diagnosis = diagnosis;
-//     if (symptoms) record.symptoms = symptoms;
-//     if (prescription) record.prescription = prescription;
-//     if (notes) record.notes = notes;
-//     if (prescriptions) record.prescriptions = prescriptions;
-//     if (vitals) record.vitals = vitals;
-//     if (nextVisit) record.nextVisit = nextVisit;
-
-//     await record.save();
-
-//     res.json({
-//       message: 'Record updated successfully',
-//       record
-//     });
-//   } catch (err) {
-//     res.status(500).json({ message: err.message });
-//   }
-// });
-
-// // ✅ Delete Record (Hospital Admin Only)
-// router.delete('/:id', authenticate, authorize('hospital'), async (req, res) => {
-//   try {
-//     const { id } = req.params;
-
-//     const record = await MedicalRecord.findById(id);
-//     if (!record) {
-//       return res.status(404).json({ message: 'Record not found' });
-//     }
-
-//     // Check if record belongs to this hospital
-//     if (record.hospitalId.toString() !== req.user.hospitalId) {
-//       return res.status(403).json({ message: 'Cannot delete records from other hospitals' });
-//     }
-
-//     await MedicalRecord.findByIdAndDelete(id);
-
-//     res.json({ message: 'Record deleted successfully' });
-//   } catch (err) {
-//     res.status(500).json({ message: err.message });
-//   }
-// });
-
-// export default router;
-
 import express from 'express';
 import MedicalRecord from '../models/MedicalRecord.js';
 import Patient from '../models/Patient.js';
@@ -246,10 +10,10 @@ const router = express.Router();
 const storage = multer.memoryStorage();
 const upload = multer({ 
   storage,
-  limits: { fileSize: 10 * 1024 * 1024 } // 10MB limit
+  limits: { fileSize: 10 * 1024 * 1024 }
 });
 
-// ✅ Get All Records (Hospital-specific)
+// Get All Records
 router.get('/', authenticate, authorize('hospital', 'doctor'), async (req, res) => {
   try {
     const hospitalId = req.user.hospitalId;
@@ -266,7 +30,7 @@ router.get('/', authenticate, authorize('hospital', 'doctor'), async (req, res) 
   }
 });
 
-// ✅ Create Medical Record (Voice or Manual)
+// Create Medical Record
 router.post('/', authenticate, authorize('doctor', 'hospital'), async (req, res) => {
   try {
     const { 
@@ -288,11 +52,10 @@ router.post('/', authenticate, authorize('doctor', 'hospital'), async (req, res)
 
     if (!patientId || !hospitalId || !finalDoctorId || !diagnosis) {
       return res.status(400).json({ 
-        message: 'Missing required fields: patientId, hospitalId, doctorId, diagnosis' 
+        message: 'Missing required fields' 
       });
     }
 
-    // Create search keywords for voice search
     const keywords = [
       diagnosis,
       symptoms,
@@ -312,12 +75,11 @@ router.post('/', authenticate, authorize('doctor', 'hospital'), async (req, res)
       vitals,
       nextVisit,
       visitType,
-      searchKeywords: [...new Set(keywords)] // unique keywords
+      searchKeywords: [...new Set(keywords)]
     });
 
     await record.save();
 
-    // Update hospital-patient link
     await HospitalPatientLink.findOneAndUpdate(
       { patientId, hospitalId },
       { 
@@ -327,7 +89,6 @@ router.post('/', authenticate, authorize('doctor', 'hospital'), async (req, res)
       { upsert: true }
     );
 
-    // Populate before sending response
     await record.populate('patientId', 'name age gender');
     await record.populate('doctorId', 'name specialization');
 
@@ -341,11 +102,11 @@ router.post('/', authenticate, authorize('doctor', 'hospital'), async (req, res)
   }
 });
 
-// 🔥 NEW: Upload Record with Multiple Files
+// Upload Record with Files
 router.post('/upload-files', 
   authenticate, 
   authorize('hospital', 'doctor'), 
-  upload.array('files', 10), // Max 10 files
+  upload.array('files', 10),
   async (req, res) => {
     try {
       const { 
@@ -354,8 +115,8 @@ router.post('/upload-files',
         diagnosis, 
         notes, 
         prescriptions,
-        fileTypes, // JSON string: ["X-Ray", "Blood Test"]
-        fileDescriptions // JSON string: ["Chest X-ray", "CBC report"]
+        fileTypes,
+        fileDescriptions
       } = req.body;
       
       const hospitalId = req.user.hospitalId;
@@ -364,11 +125,9 @@ router.post('/upload-files',
         return res.status(400).json({ message: 'Missing required fields' });
       }
 
-      // Parse file metadata
       const types = fileTypes ? JSON.parse(fileTypes) : [];
       const descriptions = fileDescriptions ? JSON.parse(fileDescriptions) : [];
 
-      // Process uploaded files
       const filesData = req.files.map((file, index) => ({
         fileName: `${Date.now()}_${file.originalname}`,
         originalName: file.originalname,
@@ -392,7 +151,6 @@ router.post('/upload-files',
 
       await record.save();
 
-      // Update hospital-patient link
       await HospitalPatientLink.findOneAndUpdate(
         { patientId, hospitalId },
         { 
@@ -417,43 +175,105 @@ router.post('/upload-files',
   }
 );
 
-// 🔥 NEW: Voice-Based File Search
+// 🔥 SMART Voice Search - Extracts patient names intelligently!
 router.post('/voice-search', authenticate, authorize('doctor', 'patient'), async (req, res) => {
   try {
-    const { query, patientId } = req.body; // query: "ecg report", patientId: optional
+    const { query, patientId } = req.body;
 
     if (!query) {
       return res.status(400).json({ message: 'Search query required' });
     }
 
-    // Parse query for keywords
-    const keywords = query.toLowerCase().split(' ');
-    
-    // Build search filter
-    let filter = {};
+    console.log('🔍 Voice search query:', query);
 
-    // If patient role, search only their records
+    // Base filter
+    let filter = {};
     if (req.user.role === 'patient') {
       filter.patientId = req.user.id;
     } else if (patientId) {
-      // Doctor searching for specific patient
       filter.patientId = patientId;
       filter.hospitalId = req.user.hospitalId;
     } else {
-      // Doctor searching all patients in their hospital
       filter.hospitalId = req.user.hospitalId;
     }
 
-    // Text search on diagnosis, symptoms, keywords
+    console.log('📋 Base filter:', filter);
+
+    const searchTerm = query.trim();
+
+    // ✅ SMART NAME EXTRACTION: Remove common phrases to get patient name
+    const commonPhrases = [
+      'show me all reports of',
+      'show me reports of',
+      'give me all reports of',
+      'give me reports of',
+      'show all reports of',
+      'find reports of',
+      'get reports of',
+      'show me',
+      'give me',
+      'find',
+      'get',
+      'all reports of',
+      'reports of',
+      'reports for',
+      'records of',
+      'records for'
+    ];
+
+    let extractedName = searchTerm.toLowerCase();
+    
+    // Remove common phrases
+    commonPhrases.forEach(phrase => {
+      extractedName = extractedName.replace(new RegExp(phrase, 'gi'), '').trim();
+    });
+
+    console.log('🔑 Extracted search term:', extractedName);
+
+    // ✅ STEP 1: Search for matching patients by name
+    let matchingPatientIds = [];
+    
+    if (!patientId) {
+      // Try both full query and extracted name
+      const patients = await Patient.find({
+        $or: [
+          { name: { $regex: extractedName, $options: 'i' } },
+          { name: { $regex: searchTerm, $options: 'i' } }
+        ]
+      }).select('_id name');
+
+      matchingPatientIds = patients.map(p => p._id);
+      
+      if (patients.length > 0) {
+        console.log('👥 Found matching patients:', patients.map(p => p.name));
+      }
+    }
+
+    // ✅ STEP 2: Build search conditions
+    const searchConditions = [
+      { diagnosis: { $regex: searchTerm, $options: 'i' } },
+      { diagnosis: { $regex: extractedName, $options: 'i' } },
+      { symptoms: { $regex: searchTerm, $options: 'i' } },
+      { symptoms: { $regex: extractedName, $options: 'i' } },
+      { notes: { $regex: searchTerm, $options: 'i' } },
+      { prescription: { $regex: searchTerm, $options: 'i' } },
+      { 'files.fileType': { $regex: searchTerm, $options: 'i' } },
+      { 'files.fileType': { $regex: extractedName, $options: 'i' } },
+      { 'files.originalName': { $regex: searchTerm, $options: 'i' } },
+      { 'files.originalName': { $regex: extractedName, $options: 'i' } },
+      { 'files.description': { $regex: searchTerm, $options: 'i' } },
+      { 'files.description': { $regex: extractedName, $options: 'i' } }
+    ];
+
+    // Add patient IDs to search if found
+    if (matchingPatientIds.length > 0) {
+      searchConditions.push({ patientId: { $in: matchingPatientIds } });
+    }
+
+    // ✅ STEP 3: Search records
     const records = await MedicalRecord.find({
       ...filter,
-      $or: [
-        { diagnosis: { $regex: keywords.join('|'), $options: 'i' } },
-        { symptoms: { $regex: keywords.join('|'), $options: 'i' } },
-        { searchKeywords: { $in: keywords } },
-        { 'files.fileType': { $regex: keywords.join('|'), $options: 'i' } },
-        { 'files.description': { $regex: keywords.join('|'), $options: 'i' } }
-      ]
+      $or: searchConditions
     })
       .populate('patientId', 'name age gender phone')
       .populate('doctorId', 'name specialization')
@@ -461,50 +281,68 @@ router.post('/voice-search', authenticate, authorize('doctor', 'patient'), async
       .sort({ createdAt: -1 })
       .limit(50);
 
+    console.log('✅ Found records:', records.length);
+
+    if (records.length > 0) {
+      console.log('📄 First result:', {
+        patient: records[0].patientId?.name,
+        diagnosis: records[0].diagnosis,
+        files: records[0].files.map(f => f.originalName)
+      });
+    }
+
     res.json({
-      query,
+      query: searchTerm,
+      extractedTerm: extractedName,
       count: records.length,
       records
     });
   } catch (err) {
-    console.error('Voice search error:', err);
+    console.error('❌ Voice search error:', err);
     res.status(500).json({ message: err.message });
   }
 });
 
-// // 🔥 NEW: Download File
-// router.get('/file/:recordId/:fileIndex', authenticate, async (req, res) => {
-//   try {
-//     const { recordId, fileIndex } = req.params;
+// 🔍 DEBUG: See all files in database
+router.get('/debug-files', authenticate, async (req, res) => {
+  try {
+    const hospitalId = req.user.hospitalId;
+    
+    const records = await MedicalRecord.find({ 
+      hospitalId,
+      'files.0': { $exists: true }
+    })
+      .select('diagnosis files.originalName files.fileType files.description patientId createdAt')
+      .populate('patientId', 'name')
+      .sort({ createdAt: -1 })
+      .limit(20);
 
-//     const record = await MedicalRecord.findById(recordId);
-//     if (!record) {
-//       return res.status(404).json({ message: 'Record not found' });
-//     }
+    const fileList = records.map(r => ({
+      recordId: r._id,
+      date: r.createdAt,
+      patient: r.patientId?.name,
+      diagnosis: r.diagnosis,
+      files: r.files.map(f => ({
+        name: f.originalName,
+        type: f.fileType,
+        description: f.description || 'No description'
+      }))
+    }));
 
-//     const file = record.files[fileIndex];
-//     if (!file) {
-//       return res.status(404).json({ message: 'File not found' });
-//     }
+    res.json({
+      totalRecordsWithFiles: records.length,
+      records: fileList
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
-//     // Set headers for file download
-//     res.set({
-//       'Content-Type': file.mimeType,
-//       'Content-Disposition': `attachment; filename="${file.originalName}"`,
-//       'Content-Length': file.fileSize
-//     });
-
-//     res.send(file.fileData);
-//   } catch (err) {
-//     console.error('Download file error:', err);
-//     res.status(500).json({ message: err.message });
-//   }
-// });
-// 🔥 UPDATED: Download/View File
+// Download/View File
 router.get('/file/:recordId/:fileIndex', authenticate, async (req, res) => {
   try {
     const { recordId, fileIndex } = req.params;
-    const { download } = req.query; // Check if download or view
+    const { download } = req.query;
 
     const record = await MedicalRecord.findById(recordId);
     if (!record) {
@@ -516,16 +354,13 @@ router.get('/file/:recordId/:fileIndex', authenticate, async (req, res) => {
       return res.status(404).json({ message: 'File not found' });
     }
 
-    // ✅ FIX: Different headers for view vs download
     if (download === 'true') {
-      // Download mode
       res.set({
         'Content-Type': file.mimeType || 'application/octet-stream',
         'Content-Disposition': `attachment; filename="${file.originalName}"`,
         'Content-Length': file.fileSize
       });
     } else {
-      // View mode (inline)
       res.set({
         'Content-Type': file.mimeType || 'application/pdf',
         'Content-Disposition': `inline; filename="${file.originalName}"`,
@@ -541,7 +376,7 @@ router.get('/file/:recordId/:fileIndex', authenticate, async (req, res) => {
   }
 });
 
-// ✅ Get Doctor's Records (Current Hospital Only)
+// Get Doctor's Records
 router.get('/doctor/:doctorId', authenticate, authorize('doctor', 'hospital'), async (req, res) => {
   try {
     const { doctorId } = req.params;
@@ -565,7 +400,7 @@ router.get('/doctor/:doctorId', authenticate, authorize('doctor', 'hospital'), a
   }
 });
 
-// ✅ Get Patient's Records (All Hospitals or Specific)
+// Get Patient's Records
 router.get('/patient/:patientId', authenticate, authorize('doctor', 'patient', 'hospital'), async (req, res) => {
   try {
     const { patientId } = req.params;
@@ -577,7 +412,6 @@ router.get('/patient/:patientId', authenticate, authorize('doctor', 'patient', '
 
     let query = { patientId };
 
-    // If not patient role and not requesting all hospitals, filter by current hospital
     if (req.user.role !== 'patient' && !allHospitals) {
       query.hospitalId = req.user.hospitalId;
     }
@@ -593,7 +427,7 @@ router.get('/patient/:patientId', authenticate, authorize('doctor', 'patient', '
   }
 });
 
-// ✅ Update Record
+// Update Record
 router.put('/:id', authenticate, authorize('doctor'), async (req, res) => {
   try {
     const { id } = req.params;
@@ -627,7 +461,7 @@ router.put('/:id', authenticate, authorize('doctor'), async (req, res) => {
   }
 });
 
-// ✅ Delete Record
+// Delete Record
 router.delete('/:id', authenticate, authorize('hospital'), async (req, res) => {
   try {
     const { id } = req.params;
