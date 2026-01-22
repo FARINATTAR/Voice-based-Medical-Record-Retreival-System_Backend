@@ -4,9 +4,9 @@ import os
 
 app = Flask(__name__)
 
-# Use "medium" or "large" model for better accuracy
-# "base" is fast but less accurate
-model = whisper.load_model("medium")  # 🔥 CHANGED FROM "base"
+
+model = whisper.load_model("medium")  
+
 
 @app.route('/transcribe', methods=['POST'])
 def transcribe():
