@@ -33,7 +33,8 @@ router.post('/qr/:patientId', authenticate, authorize('patient', 'doctor', 'hosp
     // Long-lived because emergencies are unpredictable; revocable by rotating
     // EMERGENCY_QR_SECRET.
     const token = jwt.sign({ pid: patientId, type: 'emergency' }, QR_SECRET, { expiresIn: '365d' });
-    const url = `${FRONTEND_URL}/emergency/${token}`;
+    const origin = req.body.origin || FRONTEND_URL;
+    const url = `${origin}/emergency/${token}`;
     const qrDataUrl = await QRCode.toDataURL(url, { width: 320, margin: 2 });
 
     res.json({ token, url, qrDataUrl, patientName: patient.name });
