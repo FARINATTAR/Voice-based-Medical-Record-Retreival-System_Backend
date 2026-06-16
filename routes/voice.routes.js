@@ -7,18 +7,23 @@ import MedicalRecord from "../models/MedicalRecord.js";
 import Patient from "../models/Patient.js";
 import FormData from "form-data";
 import { authenticate, authorize } from "../middleware/auth.js";
+import { audit } from "../utils/audit.js";
 
 const router = express.Router();
 const upload = multer({ dest: "uploads/" });
 
+const ML_URL = process.env.ML_SERVICE_URL || "http://localhost:5001";
+
 // ✅ Voice Interpret + Auto Search Records (SIMPLIFIED)
-router.post("/interpret", authenticate, authorize('doctor', 'hospital'), upload.single("audio"), async (req, res) => {
+router.post("/interpret", authenticate, authorize('doctor', 'hospital', 'patient'), upload.single("audio"), async (req, res) => {
   try {
     const doctorId = req.user.id;
-    const patientId = req.body.patientId;
+    const isPatient = req.user.role === 'patient';
+    // Patients can only search their own records (across all hospitals).
+    const patientId = isPatient ? req.user.id : req.body.patientId;
     const hospitalId = req.user.hospitalId;
     
-    console.log("📥 Received:", { 
+    console.log("�� Received:", { 
       doctorId, 
       patientId,
       hospitalId,
@@ -30,21 +35,33 @@ router.post("/interpret", authenticate, authorize('doctor', 'hospital'), upload.
     }
 
     const filePath = req.file.path;
+    const language = (req.body.language || "en").toLowerCase();
     const formData = new FormData();
     formData.append("audio", fs.createReadStream(filePath));
+    formData.append("language", language);
 
-    console.log("🎤 Sending to Whisper...");
+    console.log(`�� Sending to ML service (lang=${language})...`);
 
-    const whisperRes = await axios.post("http://localhost:5001/transcribe", formData, {
+    const whisperRes = await axios.post(`${ML_URL}/transcribe`, formData, {
       headers: formData.getHeaders(),
-      timeout: 60000
+      timeout: 180000
     });
 
     console.log("✅ Whisper said:", whisperRes.data);
 
     fs.unlinkSync(filePath);
-    
+
+    // Native-language transcript for display; English translation drives search.
     const text = whisperRes.data.text || whisperRes.data.transcription || "No transcription";
+    const searchText = whisperRes.data.translation || text;
+    const detectedLanguage = whisperRes.data.language || language;
+    const medicalEntities = {
+      diseases: whisperRes.data.diseases || [],
+      drugs: whisperRes.data.drugs || [],
+      doses: whisperRes.data.doses || [],
+      vitals: whisperRes.data.vitals || []
+    };
+    const rawEntities = whisperRes.data.entities || [];
 
     // ✅ Save transcription
     const transcriptionData = {
@@ -58,19 +75,21 @@ router.post("/interpret", authenticate, authorize('doctor', 'hospital'), upload.
     }
 
     const transcription = await Transcription.create(transcriptionData);
-    console.log("💾 Saved transcription:", transcription._id);
+    console.log("�� Saved transcription:", transcription._id);
 
     // ✅ SMART AUTO-SEARCH: Extract patient name intelligently
-    console.log("🔍 Searching with query:", text);
+    console.log("�� Searching with query:", text);
     
-    let searchFilter = {
-      hospitalId: hospitalId
-    };
-
-    // If patientId provided, search only that patient's records
-    if (patientId && patientId.trim() !== '') {
-      searchFilter.patientId = patientId;
-      console.log("🎯 Patient-specific search for:", patientId);
+    let searchFilter = {};
+    if (isPatient) {
+      // Patient: own records only, across every hospital (no hospital filter).
+      searchFilter.patientId = req.user.id;
+    } else {
+      searchFilter.hospitalId = hospitalId;
+      if (patientId && String(patientId).trim() !== '') {
+        searchFilter.patientId = patientId;
+        console.log("�� Patient-specific search for:", patientId);
+      }
     }
 
     // ✅ SMART NAME EXTRACTION: Remove common phrases
@@ -93,13 +112,13 @@ router.post("/interpret", authenticate, authorize('doctor', 'hospital'), upload.
       'records for'
     ];
 
-    let extractedName = text.toLowerCase();
+    let extractedName = searchText.toLowerCase();
     
     commonPhrases.forEach(phrase => {
       extractedName = extractedName.replace(new RegExp(phrase, 'gi'), '').trim();
     });
 
-    console.log('🔑 Extracted term:', extractedName);
+    console.log('�� Extracted term:', extractedName);
 
     // ✅ STEP 1: Search for matching patients by name
     let matchingPatientIds = [];
@@ -108,29 +127,32 @@ router.post("/interpret", authenticate, authorize('doctor', 'hospital'), upload.
       const patients = await Patient.find({
         $or: [
           { name: { $regex: extractedName, $options: 'i' } },
-          { name: { $regex: text, $options: 'i' } }
+          { name: { $regex: searchText, $options: 'i' } }
         ]
       }).select('_id name');
 
       matchingPatientIds = patients.map(p => p._id);
       if (patients.length > 0) {
-        console.log('👥 Found matching patients:', patients.map(p => p.name));
+        console.log('�� Found matching patients:', patients.map(p => p.name));
       }
     }
 
-    // ✅ STEP 2: Build search conditions
+    // ✅ STEP 2: Build search conditions over the plaintext NER index + entities
+    // (sensitive free-text fields are AES-256 encrypted, so we don't regex them).
+    const queryTokens = [...new Set(
+      [searchText, extractedName].join(' ').toLowerCase().split(/[\s,;.]+/).filter((t) => t.length > 1)
+    )];
+
     const searchConditions = [
-      { diagnosis: { $regex: text, $options: 'i' } },
-      { diagnosis: { $regex: extractedName, $options: 'i' } },
-      { symptoms: { $regex: text, $options: 'i' } },
-      { symptoms: { $regex: extractedName, $options: 'i' } },
-      { prescription: { $regex: text, $options: 'i' } },
-      { notes: { $regex: text, $options: 'i' } },
-      { 'files.fileType': { $regex: text, $options: 'i' } },
+      { searchIndex: { $in: queryTokens } },
+      { searchKeywords: { $in: queryTokens } },
+      { 'medicalEntities.diseases': { $regex: extractedName, $options: 'i' } },
+      { 'medicalEntities.drugs': { $regex: extractedName, $options: 'i' } },
+      { 'files.fileType': { $regex: searchText, $options: 'i' } },
       { 'files.fileType': { $regex: extractedName, $options: 'i' } },
-      { 'files.description': { $regex: text, $options: 'i' } },
+      { 'files.description': { $regex: searchText, $options: 'i' } },
       { 'files.description': { $regex: extractedName, $options: 'i' } },
-      { 'files.originalName': { $regex: text, $options: 'i' } },
+      { 'files.originalName': { $regex: searchText, $options: 'i' } },
       { 'files.originalName': { $regex: extractedName, $options: 'i' } }
     ];
 
@@ -152,16 +174,14 @@ router.post("/interpret", authenticate, authorize('doctor', 'hospital'), upload.
 
     console.log(`✅ Found ${records.length} matching records`);
 
-    if (records.length > 0) {
-      console.log("📄 First result:", {
-        patient: records[0].patientId?.name,
-        diagnosis: records[0].diagnosis,
-        files: records[0].files.map(f => f.originalName)
-      });
-    }
+    audit(req, 'VOICE_SEARCH', { resourceType: 'MedicalRecord', details: `(${detectedLanguage}) "${text}" → ${records.length} result(s)` });
 
     res.json({ 
       text, 
+      language: detectedLanguage,
+      translation: searchText,
+      entities: rawEntities,
+      medicalEntities,
       transcriptionId: transcription._id,
       success: true,
       searchType: transcriptionData.searchType,

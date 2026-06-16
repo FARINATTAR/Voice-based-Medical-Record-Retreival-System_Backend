@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { decrypt } from '../utils/encryption.js';
 
 const medicalRecordSchema = new mongoose.Schema({
   patientId: {
@@ -44,7 +45,7 @@ const medicalRecordSchema = new mongoose.Schema({
     type: String
   },
   
-  // 🔥 FILE STORAGE - Multiple Files Support
+  // �� FILE STORAGE - Multiple Files Support
   files: [
     {
       fileName: String,
@@ -84,17 +85,44 @@ const medicalRecordSchema = new mongoose.Schema({
   },
   
   searchKeywords: [String],
-  
+
+  // �� Auto-extracted medical entities (from the NER pipeline). Kept as
+  // plaintext so encrypted free-text fields remain searchable through these.
+  medicalEntities: {
+    diseases: [String],
+    drugs: [String],
+    doses: [String],
+    vitals: [String],
+    nerBackend: String
+  },
+
+  // Lowercased searchable tokens (entities + keywords). Drives voice retrieval
+  // even when diagnosis/symptoms/etc are AES-256 encrypted at rest.
+  searchIndex: [String],
+
   nextVisit: Date
-  
+
 }, { timestamps: true });
 
-// Text index for search
-medicalRecordSchema.index({ 
-  diagnosis: 'text',
-  symptoms: 'text',
-  notes: 'text',
-  searchKeywords: 'text'
+// Text index for search (over the plaintext search tokens)
+medicalRecordSchema.index({
+  searchKeywords: 'text',
+  searchIndex: 'text'
 });
+
+// �� Decrypt sensitive fields when a record is serialised to JSON. If
+// field-level encryption is disabled (no key), values pass through unchanged.
+const ENCRYPTED_FIELDS = ['symptoms', 'diagnosis', 'prescription', 'notes', 'voiceTranscript'];
+function decryptTransform(doc, ret) {
+  for (const f of ENCRYPTED_FIELDS) {
+    if (typeof ret[f] === 'string') ret[f] = decrypt(ret[f]);
+  }
+  if (Array.isArray(ret.prescriptions)) {
+    ret.prescriptions = ret.prescriptions.map((p) => decrypt(p));
+  }
+  return ret;
+}
+medicalRecordSchema.set('toJSON', { transform: decryptTransform });
+medicalRecordSchema.set('toObject', { transform: decryptTransform });
 
 export default mongoose.model('MedicalRecord', medicalRecordSchema);

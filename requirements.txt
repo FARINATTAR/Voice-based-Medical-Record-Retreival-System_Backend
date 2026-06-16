@@ -1,0 +1,20 @@
+# Python ML service for VoiceMed (speech-to-text + medical NER)
+# Install:  pip install -r requirements.txt
+#
+# NOTE on SciSpaCy: scispacy + its biomedical models give the best NER quality
+# (this is what the paper reports). They can be hard to install on very new
+# Python versions. If scispacy is unavailable, ml_server.py automatically
+# falls back to a built-in rule-based medical NER so the app still runs.
+
+flask>=3.0.0
+flask-cors>=4.0.0
+
+# Speech-to-text (multilingual: English, Hindi, Tamil, Telugu)
+openai-whisper>=20231117
+
+# Medical Named Entity Recognition (preferred). If install fails, the
+# rule-based fallback in ml_server.py is used instead.
+# scispacy>=0.5.4
+# spacy>=3.7.0
+# Biomedical model (install after scispacy):
+#   pip install https://s3-us-west-2.amazonaws.com/ai2-s2-scispacy/releases/v0.5.4/en_core_sci_md-0.5.4.tar.gz

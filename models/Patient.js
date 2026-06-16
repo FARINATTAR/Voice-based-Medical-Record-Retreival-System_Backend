@@ -44,6 +44,10 @@ const patientSchema = new mongoose.Schema({
     phone: String,
     relation: String
   },
+
+  // Critical info surfaced via the emergency QR code (unconscious patients).
+  allergies: [String],
+  chronicConditions: [String],
   
   // ⭐ IMPORTANT: NO hospitalId field!
   // Patient is independent

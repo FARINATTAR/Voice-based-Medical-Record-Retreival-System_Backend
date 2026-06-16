@@ -82,10 +82,10 @@
 // // Start server
 // const PORT = process.env.PORT || 5000;
 // app.listen(PORT, () => {
-//   console.log(`\n🚀 Server running on port ${PORT}`);
-//   console.log(`📍 API URL: http://localhost:${PORT}`);
-//   console.log(`🏥 Hospital Signup: http://localhost:${PORT}/api/hospital/signup`);
-//   console.log(`🔐 Hospital Login: http://localhost:${PORT}/api/hospital/login\n`);
+//   console.log(`\n�� Server running on port ${PORT}`);
+//   console.log(`�� API URL: http://localhost:${PORT}`);
+//   console.log(`�� Hospital Signup: http://localhost:${PORT}/api/hospital/signup`);
+//   console.log(`�� Hospital Login: http://localhost:${PORT}/api/hospital/login\n`);
 // });
 
 import express from 'express';
@@ -100,12 +100,22 @@ import patientRoutes from './routes/patient.routes.js';
 import adminRoutes from './routes/admin.routes.js';
 import recordRoutes from './routes/record.routes.js';
 import voiceRoutes from './routes/voice.routes.js';
+import auditRoutes from './routes/audit.routes.js';
+import emergencyRoutes from './routes/emergency.routes.js';
 
 dotenv.config();
 const app = express();
 
+const allowedOrigins = [
+  process.env.FRONTEND_URL,
+  'http://localhost:5173',
+  'http://localhost:5174',
+  'http://127.0.0.1:5173',
+  'http://127.0.0.1:5174'
+].filter(Boolean);
+
 app.use(cors({
-  origin: 'http://localhost:5173',
+  origin: allowedOrigins,
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
@@ -123,6 +133,8 @@ app.use('/api/patient', patientRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/records', recordRoutes);
 app.use('/api/voice', voiceRoutes);
+app.use('/api/audit', auditRoutes);
+app.use('/api/emergency', emergencyRoutes);
 
 app.get('/', (req, res) => {
   res.json({ 
@@ -146,6 +158,6 @@ app.use((req, res) => {
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-  console.log(`📍 API URL: http://localhost:${PORT}`);
+  console.log(`�� Server running on port ${PORT}`);
+  console.log(`�� API URL: http://localhost:${PORT}`);
 });

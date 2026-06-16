@@ -4,6 +4,16 @@ node_modules/
 # Environment variables
 .env
 
+# Python virtualenv & caches
+venv/
+__pycache__/
+*.pyc
+
+# Uploaded / temp audio
+uploads/
+*.webm
+temp_audio.*
+
 # Logs
 logs
 *.log
