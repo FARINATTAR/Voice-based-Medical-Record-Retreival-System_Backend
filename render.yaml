@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: voicemed-backend
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: node server.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: MONGO_URI
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: JWT_EXPIRES_IN
+        value: 7d
+      - key: FRONTEND_URL
+        value: https://frontend-phi-ashy-42.vercel.app
+      - key: FIELD_ENCRYPTION_KEY
+        sync: false
+      - key: EMERGENCY_QR_SECRET
+        sync: false
